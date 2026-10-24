@@ -27,7 +27,6 @@
     <a href="#-download--installation">Download & Install</a> •
     <a href="#-key-features">Key Features</a> •
     <a href="#-tech-stack--architecture">Tech Stack</a> •
-    <a href="#-how-to-run-locally">Run Locally</a> •
     <a href="#-author">Author</a>
   </p>
 
@@ -125,47 +124,6 @@ Montra/
 │   └── utils/               # Currency formatting & analytics helpers
 ├── app.json                 # Expo native configuration & splash plugins
 └── package.json             # Dependencies and scripts
-```
-
----
-
-## 💻 How to Run Locally
-
-If you'd like to inspect the code or run Montra locally on your machine:
-
-### 1. Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
-- [Expo Go](https://expo.dev/go) app installed on your physical device, or an Android/iOS emulator.
-
-### 2. Clone & Install
-```bash
-# Clone the repository
-git clone https://github.com/athulrajmp21/Montra.git
-cd Montra
-
-# Install dependencies
-npm install
-```
-
-### 3. Start the Dev Server
-```bash
-npx expo start
-```
-- **On Physical Device**: Scan the QR code displayed in the terminal using the **Expo Go** app (Android) or Camera app (iOS).
-- **On Android Emulator**: Press `a`.
-- **On iOS Simulator**: Press `i` (macOS required).
-
-### 4. Build Your Own APK
-To build an installable APK using EAS:
-```bash
-# Install EAS CLI
-npm install -g eas-cli
-
-# Log in to your Expo account
-npx eas login
-
-# Trigger cloud Android APK build
-npx eas build -p android --profile preview
 ```
 
 ---
