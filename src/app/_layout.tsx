@@ -13,6 +13,7 @@ import {
   PlusJakartaSans_800ExtraBold,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { MontraSplashScreen } from '../components/MontraSplashScreen';
+import { MontraLockScreen } from '../components/MontraLockScreen';
 
 // Keep the native splash screen visible until the React tree mounts
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -20,7 +21,18 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 function RootLayoutNav() {
-  const { theme, isReady, uiMode, themeMode, hasCompletedOnboarding } = useMontra();
+  const {
+    theme,
+    typography,
+    layout,
+    isReady,
+    uiMode,
+    themeMode,
+    hasCompletedOnboarding,
+    isAppLocked,
+    biometricPin,
+    unlockApp,
+  } = useMontra();
   const pathname = usePathname();
   const [isSplashAnimationDone, setIsSplashAnimationDone] = useState(false);
 
@@ -110,6 +122,17 @@ function RootLayoutNav() {
           }}
         />
       </Stack>
+
+      {/* Biometric & PIN App Lock Overlay */}
+      <MontraLockScreen
+        visible={isAppLocked}
+        onUnlock={unlockApp}
+        fallbackPin={biometricPin}
+        theme={theme}
+        typography={typography}
+        layout={layout}
+        uiMode={uiMode}
+      />
     </>
   );
 }

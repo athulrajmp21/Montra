@@ -36,6 +36,12 @@
           "imageWidth": 100,
           "resizeMode": "contain"
         }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Montra to use Face ID to protect your financial data."
+        }
       ]
     ],
     "extra": {

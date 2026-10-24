@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { 
   UIMode, 
   ThemeMode,
@@ -28,6 +29,15 @@ interface MontraContextValue {
   isReady: boolean;
   hasCompletedOnboarding: boolean;
   refreshTrigger: number;
+  isBiometricEnabled: boolean;
+  biometricAutoLockDelay: number;
+  biometricPin: string;
+  isAppLocked: boolean;
+  setIsAppLocked: (locked: boolean) => void;
+  setIsBiometricEnabled: (enabled: boolean) => Promise<void>;
+  setBiometricAutoLockDelay: (delay: number) => Promise<void>;
+  setBiometricPin: (pin: string) => Promise<void>;
+  unlockApp: () => void;
   setUIMode: (mode: UIMode) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   setCurrency: (currency: string) => Promise<void>;
@@ -59,6 +69,12 @@ export function MontraProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState<boolean>(false);
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
+  // Biometric & App Lock State
+  const [isBiometricEnabled, setIsBiometricEnabledState] = useState<boolean>(false);
+  const [biometricAutoLockDelay, setBiometricAutoLockDelayState] = useState<number>(0);
+  const [biometricPin, setBiometricPinState] = useState<string>('');
+  const [isAppLocked, setIsAppLockedState] = useState<boolean>(false);
+
   useEffect(() => {
     async function setup() {
       try {
@@ -87,6 +103,20 @@ export function MontraProvider({ children }: { children: React.ReactNode }) {
         const defaultAvatar = savedAge !== null && savedAge >= 60 ? '🧓' : '🧑‍💻';
         const onboardingDone = await getSetting('has_completed_onboarding', 'false');
 
+        // Biometric Settings
+        const savedBioEnabled = await getSetting('biometric_enabled', 'false');
+        const savedBioDelayStr = await getSetting('biometric_auto_lock_delay', '0');
+        const savedBioDelay = parseInt(savedBioDelayStr, 10) || 0;
+        const savedBioPin = await getSetting('biometric_pin', '');
+
+        const isBioOn = savedBioEnabled === 'true';
+        setIsBiometricEnabledState(isBioOn);
+        setBiometricAutoLockDelayState(savedBioDelay);
+        setBiometricPinState(savedBioPin);
+        if (isBioOn) {
+          setIsAppLockedState(true);
+        }
+
         setUserName(savedName);
         setUserAge(savedAge);
         setUserAvatarState(savedAvatar || defaultAvatar);
@@ -104,6 +134,43 @@ export function MontraProvider({ children }: { children: React.ReactNode }) {
     }
     setup();
   }, []);
+
+  // Monitor AppState to lock app when returning from background
+  useEffect(() => {
+    let lastBackgroundTime = 0;
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        lastBackgroundTime = Date.now();
+      } else if (nextAppState === 'active') {
+        if (isBiometricEnabled) {
+          const elapsedSec = (Date.now() - lastBackgroundTime) / 1000;
+          if (elapsedSec >= biometricAutoLockDelay) {
+            setIsAppLockedState(true);
+          }
+        }
+      }
+    });
+    return () => subscription.remove();
+  }, [isBiometricEnabled, biometricAutoLockDelay]);
+
+  const setIsBiometricEnabled = async (enabled: boolean) => {
+    setIsBiometricEnabledState(enabled);
+    await setSetting('biometric_enabled', enabled ? 'true' : 'false');
+  };
+
+  const setBiometricAutoLockDelay = async (delay: number) => {
+    setBiometricAutoLockDelayState(delay);
+    await setSetting('biometric_auto_lock_delay', String(delay));
+  };
+
+  const setBiometricPin = async (pin: string) => {
+    setBiometricPinState(pin);
+    await setSetting('biometric_pin', pin);
+  };
+
+  const unlockApp = () => {
+    setIsAppLockedState(false);
+  };
 
   const setUIMode = async (mode: UIMode) => {
     setModeState(mode);
@@ -200,6 +267,15 @@ export function MontraProvider({ children }: { children: React.ReactNode }) {
         isReady,
         hasCompletedOnboarding,
         refreshTrigger,
+        isBiometricEnabled,
+        biometricAutoLockDelay,
+        biometricPin,
+        isAppLocked,
+        setIsAppLocked: setIsAppLockedState,
+        setIsBiometricEnabled,
+        setBiometricAutoLockDelay,
+        setBiometricPin,
+        unlockApp,
         setUIMode,
         setThemeMode,
         setCurrency,

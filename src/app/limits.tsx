@@ -733,7 +733,7 @@ export default function LimitsScreen() {
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityLabel={`Delete custom category ${displayName}`}
                       >
-                        <Trash2 size={16} color={theme.danger} />
+                        <Trash2 size={16} color={theme.dangerRed} />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -867,7 +867,7 @@ export default function LimitsScreen() {
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           accessibilityLabel={`Delete custom category ${displayName}`}
                         >
-                          <Trash2 size={16} color={theme.danger} />
+                          <Trash2 size={16} color={theme.dangerRed} />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -1751,7 +1751,7 @@ export default function LimitsScreen() {
               </View>
               <TouchableOpacity
                 onPress={() => setIsAddCategoryModalVisible(false)}
-                style={styles.closeBtn}
+                style={styles.closeIconBtn}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <X size={20} color={theme.textMuted} />
@@ -1803,7 +1803,7 @@ export default function LimitsScreen() {
               />
 
               {/* Presets */}
-              <View style={styles.presetsRow}>
+              <View style={styles.presetChipRow}>
                 {[1000, 2500, 5000, 10000].map((preset) => (
                   <TouchableOpacity
                     key={preset}
