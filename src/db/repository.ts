@@ -63,6 +63,45 @@ export async function updateCategoryTarget(id: string, newTarget: number): Promi
   );
 }
 
+export async function addCategory(category: CategoryItem): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO categories (id, name, easy_name, icon, color, type, monthly_target, is_essential, description)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      category.id,
+      category.name,
+      category.easyName || category.name,
+      category.icon,
+      category.color,
+      category.type,
+      category.monthlyTarget || 0,
+      category.isEssential ? 1 : 0,
+      category.description || '',
+    ]
+  );
+}
+
+export async function deleteCategory(id: string): Promise<boolean> {
+  const db = await getDb();
+  const txCountRow = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM transactions WHERE category_id = ?',
+    [id]
+  );
+  if (txCountRow && txCountRow.count > 0) {
+    return false;
+  }
+  const subCountRow = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM subscriptions WHERE category_id = ?',
+    [id]
+  );
+  if (subCountRow && subCountRow.count > 0) {
+    return false;
+  }
+  await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
+  return true;
+}
+
 // ----------------- Transactions -----------------
 
 export async function addTransaction(data: {

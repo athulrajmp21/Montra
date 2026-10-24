@@ -32,20 +32,60 @@ import { useHaptics } from '../hooks/useHaptics';
 import {
   getCategories,
   updateCategoryTarget,
+  addCategory,
+  deleteCategory,
   getSubscriptions,
   addSubscription,
   deleteSubscription,
   toggleSubscriptionActive,
   addTransaction,
 } from '../db/repository';
-import { CategoryItem } from '../constants/categories';
+import { CategoryItem, DEFAULT_CATEGORIES } from '../constants/categories';
 import { SubscriptionWithCategory, BillingCycle } from '../db/schema';
 import { CategoryIcon } from '../components/CategoryIcon';
 import { BottomNavBar } from '../components/BottomNavBar';
 import { CustomAlert } from '../components/CustomAlert';
 import { formatCurrency, formatAmountInput, isIndianCurrency } from '../utils/formatCurrency';
 
+const AVAILABLE_CATEGORY_ICONS = [
+  'ShoppingCart',
+  'Utensils',
+  'Coffee',
+  'Car',
+  'Zap',
+  'HeartPulse',
+  'GraduationCap',
+  'TrendingUp',
+  'ShieldCheck',
+  'Home',
+  'Film',
+  'Dumbbell',
+  'Plane',
+  'ShoppingBag',
+  'Sparkles',
+  'Briefcase',
+  'Smile',
+  'Gift',
+  'Tag',
+  'Smartphone',
+  'PiggyBank',
+  'BookOpen',
+  'Baby',
+  'PawPrint',
+];
 
+const AVAILABLE_CATEGORY_COLORS = [
+  '#526B45', // Montra Forest / Olive
+  '#8FA17B', // Sage Green
+  '#D97745', // Terracotta
+  '#C04930', // Crimson / Rust
+  '#4B6B94', // Steel Slate Blue
+  '#6486B5', // Sky Blue / Investment
+  '#B86C4B', // Warm Ochre
+  '#27845B', // Emerald Mint
+  '#7C5295', // Plum
+  '#D4A373', // Sand / Gold
+];
 
 export default function LimitsScreen() {
   const { theme, typography, layout, uiMode, currency, notifyDataChanged } = useMontra();
@@ -73,6 +113,16 @@ export default function LimitsScreen() {
   const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
   const [categoryTargetInput, setCategoryTargetInput] = useState('');
+
+  // Add Category Modal State
+  const [isAddCategoryModalVisible, setIsAddCategoryModalVisible] = useState(false);
+  const [newCategoryType, setNewCategoryType] = useState<'expense' | 'investment'>('expense');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryTargetStr, setNewCategoryTargetStr] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('ShoppingCart');
+  const [newCategoryColor, setNewCategoryColor] = useState('#526B45');
+  const [newCategoryDesc, setNewCategoryDesc] = useState('');
+  const [newCategoryIsEssential, setNewCategoryIsEssential] = useState(true);
 
   // Custom Alert State
   const [alertConfig, setAlertConfig] = useState<{
@@ -323,6 +373,95 @@ export default function LimitsScreen() {
     notifyDataChanged();
   };
 
+  const handleOpenAddCategoryModal = (type: 'expense' | 'investment') => {
+    triggerLight();
+    setNewCategoryType(type);
+    setNewCategoryName('');
+    setNewCategoryTargetStr('');
+    setNewCategoryIcon(type === 'expense' ? 'ShoppingCart' : 'TrendingUp');
+    setNewCategoryColor(type === 'expense' ? '#526B45' : '#6486B5');
+    setNewCategoryDesc('');
+    setNewCategoryIsEssential(type === 'expense');
+    setIsAddCategoryModalVisible(true);
+  };
+
+  const handleSaveNewCategory = async () => {
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) {
+      triggerWarning();
+      setAlertConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Category Name Required',
+        message: 'Please enter a name for your new category.',
+      });
+      return;
+    }
+
+    if (categories.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      triggerWarning();
+      setAlertConfig({
+        visible: true,
+        type: 'warning',
+        title: 'Category Already Exists',
+        message: `A category named "${trimmedName}" already exists. Please choose a different name.`,
+      });
+      return;
+    }
+
+    const targetAmount = parseFloat(newCategoryTargetStr.replace(/,/g, '')) || 0;
+    const newId = `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
+    const newCatItem: CategoryItem = {
+      id: newId,
+      name: trimmedName,
+      easyName: trimmedName,
+      icon: newCategoryIcon,
+      color: newCategoryColor,
+      type: newCategoryType,
+      monthlyTarget: targetAmount,
+      isEssential: newCategoryIsEssential,
+      description: newCategoryDesc.trim() || `${trimmedName} budget category`,
+    };
+
+    await addCategory(newCatItem);
+    triggerSuccess();
+    setIsAddCategoryModalVisible(false);
+    await loadData();
+    notifyDataChanged();
+  };
+
+  const handleDeleteCategory = (cat: CategoryItem) => {
+    triggerWarning();
+    setAlertConfig({
+      visible: true,
+      type: 'danger',
+      title: 'Delete Category',
+      message: `Are you sure you want to delete "${cat.name}"?`,
+      primaryBtnText: 'Delete',
+      secondaryBtnText: 'Cancel',
+      onPrimaryPress: async () => {
+        setAlertConfig((prev) => ({ ...prev, visible: false }));
+        const success = await deleteCategory(cat.id);
+        if (success) {
+          triggerSuccess();
+          await loadData();
+          notifyDataChanged();
+        } else {
+          triggerWarning();
+          setTimeout(() => {
+            setAlertConfig({
+              visible: true,
+              type: 'warning',
+              title: 'Cannot Delete Category',
+              message: `"${cat.name}" cannot be deleted because there are existing transactions or subscriptions linked to it.`,
+            });
+          }, 300);
+        }
+      },
+    });
+  };
+
   const getSubMonthlyAmount = (sub: { amount: number; cycle?: BillingCycle }) => {
     if (sub.cycle === 'yearly') return Math.round(sub.amount / 12);
     if (sub.cycle === 'quarterly') return Math.round(sub.amount / 3);
@@ -516,15 +655,29 @@ export default function LimitsScreen() {
 
             {/* Expenses Section */}
             <View style={styles.sectionTitleRow}>
-              <ShieldCheck size={18} color={theme.primary} />
-              <Text
-                style={[
-                  typography.title,
-                  { color: theme.textPrimary, fontSize: uiMode === 'easy' ? 22 : 18 },
-                ]}
+              <View style={styles.sectionTitleLeft}>
+                <ShieldCheck size={18} color={theme.primary} />
+                <Text
+                  style={[
+                    typography.title,
+                    { color: theme.textPrimary, fontSize: uiMode === 'easy' ? 22 : 18 },
+                  ]}
+                >
+                  {uiMode === 'easy' ? 'Expenditure Limits' : 'Expense Budgets'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.addCategoryHeaderBtn, { backgroundColor: theme.softSage, borderColor: theme.primary + '30' }]}
+                onPress={() => handleOpenAddCategoryModal('expense')}
+                activeOpacity={0.75}
+                accessibilityLabel="Add new expense category"
               >
-                {uiMode === 'easy' ? 'Expenditure Limits' : 'Expense Budgets'}
-              </Text>
+                <Plus size={14} color={theme.primary} />
+                <Text style={[typography.caption, { color: theme.primary, fontWeight: '700' }]}>
+                  Add
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {expenseCategories.map((cat) => {
@@ -573,6 +726,16 @@ export default function LimitsScreen() {
                         {displayDesc}
                       </Text>
                     </View>
+                    {!DEFAULT_CATEGORIES.some((d) => d.id === cat.id) && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteCategory(cat)}
+                        style={{ padding: 6 }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel={`Delete custom category ${displayName}`}
+                      >
+                        <Trash2 size={16} color={theme.danger} />
+                      </TouchableOpacity>
+                    )}
                   </View>
 
                   <View style={styles.controlRow}>
@@ -633,15 +796,32 @@ export default function LimitsScreen() {
             {/* Future Investments / Savings Section */}
             <View style={{ marginTop: 20 }}>
               <View style={styles.sectionTitleRow}>
-                <TrendingUp size={18} color={theme.investment} />
-                <Text
+                <View style={styles.sectionTitleLeft}>
+                  <TrendingUp size={18} color={theme.investment} />
+                  <Text
+                    style={[
+                      typography.title,
+                      { color: theme.textPrimary, fontSize: uiMode === 'easy' ? 22 : 18 },
+                    ]}
+                  >
+                    Savings & Future Goals
+                  </Text>
+                </View>
+
+                <TouchableOpacity
                   style={[
-                    typography.title,
-                    { color: theme.textPrimary, fontSize: uiMode === 'easy' ? 22 : 18 },
+                    styles.addCategoryHeaderBtn,
+                    { backgroundColor: theme.investmentBg, borderColor: theme.investment + '30' },
                   ]}
+                  onPress={() => handleOpenAddCategoryModal('investment')}
+                  activeOpacity={0.75}
+                  accessibilityLabel="Add new savings goal"
                 >
-                  Savings & Future Goals
-                </Text>
+                  <Plus size={14} color={theme.investment} />
+                  <Text style={[typography.caption, { color: theme.investment, fontWeight: '700' }]}>
+                    Add
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               {investmentCategories.map((cat) => {
@@ -680,6 +860,16 @@ export default function LimitsScreen() {
                           {cat.description}
                         </Text>
                       </View>
+                      {!DEFAULT_CATEGORIES.some((d) => d.id === cat.id) && (
+                        <TouchableOpacity
+                          onPress={() => handleDeleteCategory(cat)}
+                          style={{ padding: 6 }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel={`Delete custom category ${displayName}`}
+                        >
+                          <Trash2 size={16} color={theme.danger} />
+                        </TouchableOpacity>
+                      )}
                     </View>
 
                     <View style={styles.controlRow}>
@@ -1530,6 +1720,244 @@ export default function LimitsScreen() {
         </View>
       </Modal>
 
+      {/* Add Category Modal */}
+      <Modal
+        visible={isAddCategoryModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsAddCategoryModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.surfaceBorder,
+                borderRadius: layout.borderRadius,
+                maxHeight: '90%',
+              },
+            ]}
+          >
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[typography.title, { color: theme.textPrimary, fontSize: 18 }]}>
+                  {newCategoryType === 'expense' ? 'New Expense Budget' : 'New Savings Goal'}
+                </Text>
+                <Text style={[typography.caption, { color: theme.textMuted }]}>
+                  Customize category name, icon, color & target
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsAddCategoryModalVisible(false)}
+                style={styles.closeBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color={theme.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+              {/* Category Name */}
+              <Text style={[typography.caption, styles.fieldLabel, { color: theme.textMuted }]}>
+                CATEGORY NAME *
+              </Text>
+              <TextInput
+                style={[
+                  styles.inputField,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.surfaceBorder,
+                    color: theme.textPrimary,
+                    borderRadius: layout.borderRadius,
+                  },
+                ]}
+                placeholder={newCategoryType === 'expense' ? 'e.g. Dining Out, Pets, Gym, Hobbies' : 'e.g. Vacation Fund, Dream Bike, Gold'}
+                placeholderTextColor={theme.textMuted}
+                value={newCategoryName}
+                onChangeText={setNewCategoryName}
+                maxLength={30}
+              />
+
+              {/* Monthly Target / Budget */}
+              <Text style={[typography.caption, styles.fieldLabel, { color: theme.textMuted }]}>
+                {newCategoryType === 'expense' ? 'MONTHLY BUDGET LIMIT' : 'MONTHLY SAVINGS TARGET'}
+              </Text>
+              <TextInput
+                style={[
+                  styles.inputField,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.surfaceBorder,
+                    color: theme.textPrimary,
+                    borderRadius: layout.borderRadius,
+                  },
+                ]}
+                placeholder="e.g. 3,000"
+                placeholderTextColor={theme.textMuted}
+                keyboardType="numeric"
+                value={formatAmountInput(newCategoryTargetStr, currency)}
+                onChangeText={(val) => setNewCategoryTargetStr(val.replace(/[^0-9]/g, ''))}
+                maxLength={10}
+              />
+
+              {/* Presets */}
+              <View style={styles.presetsRow}>
+                {[1000, 2500, 5000, 10000].map((preset) => (
+                  <TouchableOpacity
+                    key={preset}
+                    style={[
+                      styles.presetChip,
+                      {
+                        backgroundColor: theme.background,
+                        borderColor: theme.surfaceBorder,
+                      },
+                    ]}
+                    onPress={() => {
+                      triggerLight();
+                      setNewCategoryTargetStr(String(preset));
+                    }}
+                  >
+                    <Text style={[typography.caption, { color: theme.textPrimary, fontWeight: '700' }]}>
+                      {formatCurrency(preset, currency)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Icon Picker */}
+              <Text style={[typography.caption, styles.fieldLabel, { color: theme.textMuted, marginTop: 14 }]}>
+                CHOOSE ICON
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
+                <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 4, paddingVertical: 4 }}>
+                  {AVAILABLE_CATEGORY_ICONS.map((iconName) => {
+                    const isSelected = newCategoryIcon === iconName;
+                    return (
+                      <TouchableOpacity
+                        key={iconName}
+                        style={[
+                          styles.iconPickCell,
+                          {
+                            backgroundColor: isSelected ? newCategoryColor + '20' : theme.background,
+                            borderColor: isSelected ? newCategoryColor : theme.surfaceBorder,
+                          },
+                        ]}
+                        onPress={() => {
+                          triggerLight();
+                          setNewCategoryIcon(iconName);
+                        }}
+                      >
+                        <CategoryIcon name={iconName} size={20} color={isSelected ? newCategoryColor : theme.textMuted} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              {/* Color Picker */}
+              <Text style={[typography.caption, styles.fieldLabel, { color: theme.textMuted, marginTop: 14 }]}>
+                ACCENT COLOR
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {AVAILABLE_CATEGORY_COLORS.map((hex) => {
+                  const isSelected = newCategoryColor === hex;
+                  return (
+                    <TouchableOpacity
+                      key={hex}
+                      style={[
+                        styles.colorPickCell,
+                        {
+                          backgroundColor: hex,
+                          borderWidth: isSelected ? 3 : 1,
+                          borderColor: isSelected ? '#FFFFFF' : 'transparent',
+                        },
+                      ]}
+                      onPress={() => {
+                        triggerLight();
+                        setNewCategoryColor(hex);
+                      }}
+                    >
+                      {isSelected && <Check size={14} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Description */}
+              <Text style={[typography.caption, styles.fieldLabel, { color: theme.textMuted, marginTop: 14 }]}>
+                DESCRIPTION (OPTIONAL)
+              </Text>
+              <TextInput
+                style={[
+                  styles.inputField,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.surfaceBorder,
+                    color: theme.textPrimary,
+                    borderRadius: layout.borderRadius,
+                  },
+                ]}
+                placeholder="Short note or items covered"
+                placeholderTextColor={theme.textMuted}
+                value={newCategoryDesc}
+                onChangeText={setNewCategoryDesc}
+                maxLength={50}
+              />
+
+              {/* Essential Switch for Expenses */}
+              {newCategoryType === 'expense' && (
+                <View style={[styles.essentialRow, { borderColor: theme.surfaceBorder }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.subtitle, { color: theme.textPrimary, fontWeight: '600', fontSize: 13 }]}>
+                      Essential Living Expense
+                    </Text>
+                    <Text style={[typography.caption, { color: theme.textMuted, fontSize: 11 }]}>
+                      Factored into mandatory daily safe-to-spend pace
+                    </Text>
+                  </View>
+                  <Switch
+                    value={newCategoryIsEssential}
+                    onValueChange={(val) => {
+                      triggerLight();
+                      setNewCategoryIsEssential(val);
+                    }}
+                    trackColor={{ false: theme.surfaceBorder, true: theme.primary }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Actions */}
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <TouchableOpacity
+                style={[styles.modalActionCancelBtn, { borderColor: theme.surfaceBorder }]}
+                onPress={() => setIsAddCategoryModalVisible(false)}
+              >
+                <Text style={[typography.body, { color: theme.textMuted, fontWeight: '600' }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalActionConfirmBtn,
+                  { backgroundColor: newCategoryType === 'expense' ? theme.primary : theme.investment, flex: 1 },
+                ]}
+                onPress={handleSaveNewCategory}
+              >
+                <Check size={16} color="#FFFFFF" />
+                <Text style={[typography.button, { color: '#FFFFFF', marginLeft: 6 }]}>
+                  Create Category
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Custom Confirmation / Alert Dialog */}
       <CustomAlert
         visible={alertConfig.visible}
@@ -1613,8 +2041,50 @@ const styles = StyleSheet.create({
   sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  sectionTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  addCategoryHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 4,
+  },
+  iconPickCell: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorPickCell: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  essentialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    marginTop: 12,
   },
   limitCard: {
     borderWidth: 1.5,
